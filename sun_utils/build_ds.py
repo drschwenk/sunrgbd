@@ -88,33 +88,91 @@ def build_v2_addition_3d(v2_matlab_arr):
     return v2_anno
 
 
-def build_dataset(all_ds_files):
-    d2_anno_names = [iname for iname in all_ds_files if 'annotation2Dfinal/' in iname and not 'json_' in iname]
-    d3_anno_names = [iname for iname in all_ds_files if 'annotation3Dfinal/' in iname and not 'json_' in iname]
-    d2_3_anno_names = [iname for iname in all_ds_files if 'annotation2D3D/' in iname and not 'json_' in iname]
+def read_sun_dataset(all_2d_files):
+
+
+
+    base_paths = [fp.split('annotation2Dfinal')[0] for fp in all_2d_files]
 
     anno_types_to_load = {
-        '2D': d2_anno_names,
-        '3D': d3_anno_names,
-        '2D3D': d2_3_anno_names
+        '2D': 'annotation2Dfinal/',
+        # '3D': 'annotation3Dfinal/',
+        # '2D3D': 'annotation2D3D/'
     }
 
     sun_rgb_anno = defaultdict(lambda: defaultdict(dict))
-    for ann_type, anno_names in anno_types_to_load.items():
-        for ann_fn in tqdm(anno_names):
-            img_dir = ann_fn.split('/')[-3]
-            with open(ann_fn, 'r') as f:
-                try:
+    for base_path in tqdm(base_paths):
+        img_dir = base_path.split('/')[-2]
+        for ann_type, anno_dir in anno_types_to_load.items():
+            try:
+                with open(os.path.join(base_path, anno_dir, 'index.json'), 'r') as f:
                     img_annotation = json.load(f)
-                except json.JSONDecodeError as e:
-                    continue
-            sun_rgb_anno[img_dir][ann_type] = img_annotation
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                continue
+            sun_rgb_anno[img_dir]['objects'][ann_type] = img_annotation
+
+        with open(os.path.join(base_path, 'scene.txt'), 'r') as f:
+            scene = f.read()
+
+        with open(os.path.join(base_path, 'intrinsics.txt'), 'r') as f:
+            intrinsics = f.read().splitlines()
+
+        # image_segmentation = loadmat(os.path.join(base_path, 'seg.mat'))
+
+        sun_rgb_anno[img_dir]['intrinsics'] = intrinsics
+        sun_rgb_anno[img_dir]['scene'] = scene
+        # sun_rgb_anno[img_dir]['segmentation'] = image_segmentation
+        sun_rgb_anno[img_dir]['imgPath'] = '/'.join(base_path.split('/')[:-2])
+
     return {k: dict(v) for k, v in sun_rgb_anno.items()}
 
-# updated_2d_bbs = loadmat('./SUNRGBDMeta2DBB_v2.mat')['SUNRGBDMeta2DBB'].T
-# updated_3d_bbs = loadmat('./SUNRGBDMeta3DBB_v2.mat')['SUNRGBDMeta'].T
+
+def build_dataset(sun_dataset):
+    ds_scaffold = {}
+    for image_name, annotations in sun_dataset.items():
+        new_image_entry = {
+            'imageID': image_name,
+            "sunPath": annotations['imgPath'],
+            "scene": annotations['scene']
+        }
+        ds_scaffold[image_name] = new_image_entry
+    return ds_scaffold
 
 
-# v2_suppl_2d = build_v2_addition(updated_2d_bbs)
+"""
+design draft v3:
+{
+    image: {
+        name
+        scene
+        layout
+        intrinsics
+        detector
+        filenames: {
+            image
+            fullres
+            depth
+        }
+        segmentation_arr
+        objects : {
+            obj_id: {
+                label
+                globalID
+                2D: {
+                    polygon: []
+                    rectangle: [
+                },
+                3D: {
+                    depth
+                },
+                phys_props: {
 
-
+                }
+            }
+            .
+            .
+            .
+        }
+    }
+}
+"""
